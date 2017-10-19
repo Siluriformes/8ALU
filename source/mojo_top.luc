@@ -1,0 +1,238 @@
+module mojo_top (
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    input io_dip [3][8],    // DIP switches on IO Shield
+    input io_button [5],    // 5 buttons on IO Shield
+    output led [8],         // 8 user controllable LEDs
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4]       // Digit select on IO Shield
+  ) {
+  
+  sig rst;                  // reset signal
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+    
+    .rst(rst){
+      dff counter[30]; //counter used to cycle through different states      
+      multi_seven_seg seg_display;
+      //defining state machine states
+      fsm state = {IDLE, ADDERTEST1, ADDERERRORTEST, ADDERERROR, COMPTEST1, COMPERRORTEST, COMPERROR, BOOLEANTEST1, BOOLEANERRORTEST, BOOLEANERROR, SHIFTTEST1, SHIFTERRORTEST, SHIFTERROR, END};
+    }
+  }
+  
+  sig alufn[6]; //8-bit input alufn
+  sig a[8]; //8-bit input a 
+  sig b[8]; //8-bit input b
+  sig alu[8]; //8-bit output of alu
+  const X = 27;//constant used to control time before transitioning to next state (increase value to increase delay between states)
+
+  dec_digit decdigit;
+  alu alu1;
+  
+  always {
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    led[6:1] = 6h00;        // turn mojo[6:0] LEDs off 
+    
+    seg_display.values = {decdigit.out3, decdigit.out2, decdigit.out1, decdigit.out0};
+    io_seg = ~seg_display.seg;  // connects segments to inverted seg_display.seg
+    io_sel = ~seg_display.sel;  // connects selector to inverted seg_display.sel
+    
+    b = io_dip[0]; //right dip switch controls input b
+    a = io_dip[1]; //middle dip switch controls input a
+    alufn = io_dip[2][5:0]; // first 6-bits of left dip switch controls input alufn
+
+    alu1.alufn = alufn; // alufn input to alu module
+    alu1.a = a; //a input to alu module
+    alu1.b = b; //b input to alu module
+    alu = alu1.alu; //alu module output
+    
+    io_led[2] = alufn; // left leds show alufn (8bits)
+    io_led[1] = io_dip[1]; // middle leds show input b (8bits)
+    io_led[0] = io_dip[0]; // right leds show input a (8bits)
+    led[7] = alu1.v; // mojo bottom led shows overflow
+    led[0] = alu1.n; // mojo top led shows negative
+    
+    decdigit.in = alu; //8 bit output of alu converted into 3-digit decimal value
+    if(alufn[5:4]==b00){
+    decdigit.n = alu1.n; //display negative sign if using adder
+    }
+    else{decdigit.n=0;}
+    
+    //STATEMACHINE FOR TEST CASES
+    case (state.q) {
+      state.IDLE: //normal functioning alu (without test)
+      counter.d = 0; //clock counter is 0 when in idle state
+        if (io_button[1] == 1){ //pressing "CENTER" button initiates transition to TEST states
+          state.d = state.ADDERTEST1;} //transition to testing the alu
+      
+      state.ADDERTEST1: // ADDER Test case 1(SUB): 5-8 = -3
+      alu1.alufn = 6b000001; //selects substraction operation of alu
+      alu1.a = 8d5; //input a = 5
+      alu1.b = 8d8; //input b = 8
+      io_led[2] = 8d1; // left 8 leds display 6 bits of input alufn
+      io_led[1] = 8d5; //center 8 leds display 8 bits of input a
+      io_led[0] = 8d8; //right 8 leds display 8 bits of input b        
+      seg_display.values[3] = 4d15; //displays "A" to show testing adder
+      counter.d = counter.q+1; //continually increases clock counter until delay time is over
+        if (counter.q[X]==1&&alu == 8d3){ //once counter reaches defined value, and output of ALU is equal to manually calculated value (CORRECT ANSWER)
+          counter.d = 0;
+          state.d = state.ADDERERRORTEST; //move on to next test case
+        }else if (counter.q[X] == 1 && alu!= 8d3){ //once counter reachse defined value but output of value is not equal to calculated value (WRONG ANSWER)
+          counter.d = 0;
+          state.d=state.ADDERERROR;} //move to adder error state 
+          
+      state.ADDERERRORTEST://ADDER error test case: 5+7=12 (+1)
+      alu1.alufn = 6b0; 
+      alu1.a = 8b101;
+      alu1.b = 8b111;
+      alu = alu1.alu+1; //adding 1 to output of adder to create incorrect result
+      io_led[1] = 8b111;
+      io_led[0] = 8b101;    
+      decdigit.in = alu;
+      seg_display.values[3] = 4d15;
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b1100){ //if result is correct, move on to next test case
+          counter.d = 0;
+          state.d = state.COMPTEST1;}
+        else if (counter.q[X] == 1 && alu!= 8b1100){ //else move to adder error state
+          counter.d=0;
+          state.d=state.ADDERERROR;}
+          
+      state.ADDERERROR: //ADDER ERROR
+        counter.d = 0;
+        seg_display.values = {5d15, 5d14, 5d12, 5d12};
+        if (io_button[1] == 1){ //when button is pressed
+        state.d = state.COMPTEST1;} //move to next test
+          
+      state.COMPTEST1: //COMP Test case 1(CMPEQ): 8b10110100 == 8b10110100?, result = 8b1
+      alu1.alufn = 6b110011; 
+      alu1.a = 8b10110100;
+      alu1.b = 8b10110100;
+      alu = alu1.alu; 
+      io_led[2] = 6b110011;
+      io_led[1] = 8b10110100;
+      io_led[0] = 8b10110100; 
+      seg_display.values[3] = 5d16;            
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b1){
+          counter.d = 0;
+          state.d = state.COMPERRORTEST;
+        }  else if (counter.q[X] == 1 && alu!= 8b1){
+          counter.d=0;
+          state.d=state.COMPERROR;}    
+          
+      state.COMPERRORTEST: //COMP error test case ): 8b1111 == 8b1111?, result = 8b1
+      alu1.alufn = 6b110011; 
+      alu1.a = 8b1111;
+      alu1.b = 8b1111;
+      alu = 1^alu1.alu; //flip output of comparator to create incorrect result
+      io_led[2] = 6b110011;
+      io_led[1] = 8b1111;
+      io_led[0] = 8b1111;    
+      decdigit.in = alu;
+      seg_display.values[3] = 5d16;     
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b1){
+          counter.d = 0;
+          state.d = state.BOOLEANTEST1;
+        }else if (counter.q[X] == 1 && alu!= 8b1){
+          counter.d=0;
+          state.d=state.COMPERROR;}  
+          
+      state.COMPERROR: //COMPARE ERROR
+      seg_display.values = {5d16, 5d14, 5d12, 5d12};
+      if (io_button[1] == 1){ //when button is pressed
+      state.d = state.BOOLEANTEST1;} //move to next test
+          
+      state.BOOLEANTEST1: //BOOLEAN Test case 1(AND): 8b10110100 && 8b11101101 = 8b10100100
+      alu1.alufn = 6b11000; 
+      alu1.a = 8b10110100;
+      alu1.b = 8b11101101;
+      alu = alu1.alu; 
+      io_led[2] = 6b11000;
+      io_led[1] = 8b11101101;
+      io_led[0] = 8b10110100;    
+      seg_display.values[3] = 5d8;    
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b10100100){
+          counter.d = 0;
+          state.d = state.BOOLEANERRORTEST;
+        }else if (counter.q[X] == 1 && alu!= 8b10100100){
+          counter.d=0;
+          state.d=state.BOOLEANERROR;}
+          
+      state.BOOLEANERRORTEST: //BOOLEAN error test case: 8b11010100 && 8b0 = 8b0 (+1)
+      alu1.alufn = 6b11000; 
+      alu1.a = 8b11010100;
+      alu1.b = 8b00000000;
+      alu = alu1.alu+1;
+      io_led[2] = 6b11000;
+      io_led[1] = 8b00110011;
+      io_led[0] = 8b0; 
+      seg_display.values[3] = 5d8;           
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b0){
+          counter.d = 0;
+          state.d = state.SHIFTTEST1;
+        }else if (counter.q[X] == 1 && alu!= 8b0){
+          counter.d=0;
+          state.d=state.BOOLEANERROR;}  
+          
+      state.BOOLEANERROR: //BOOLEAN ERROR
+      seg_display.values = {5d8, 5d14, 5d12, 5d12};
+      if (io_button[1] == 1){ //when button is pressed
+      state.d = state.SHIFTTEST1;} //move to next test
+          
+      state.SHIFTTEST1: //SHIFTER Test case 1(SHIFT LEFT): 8b1111 << 4 = 8b11110000
+      alu1.alufn = 6b100000; 
+      alu1.a = 8b1111;
+      alu1.b = 8b100;
+      alu = alu1.alu; 
+      io_led[2] = 6b100000;
+      io_led[1] = 8b100;
+      io_led[0] = 8b1111; 
+      seg_display.values[3] = 5d5;  
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b11110000){
+          counter.d = 0;
+          state.d = state.SHIFTERRORTEST;
+        }else if (counter.q[X] == 1 && alu!= 8b11110000){
+          counter.d=0;
+          state.d=state.SHIFTERROR;}  
+          
+      state.SHIFTERRORTEST: //SHIFTER error test case : 8b01101000 >>> 2 = 8b00011010 (+1)
+      alu1.alufn = 6b100001; 
+      alu1.a = 8b01101000;
+      alu1.b = 8b10;
+      alu = alu1.alu+1;
+      io_led[2] = 6b100001;
+      io_led[1] = 8b10;
+      io_led[0] = 8b01101000; 
+      decdigit.in = alu;
+      seg_display.values[3] = 5d5;         
+      counter.d = counter.q+1;
+        if (counter.q[X] ==1&&alu==8b00011010){
+          counter.d = 0;
+          state.d = state.END;
+        }  else if (counter.q[X] == 1 && alu!= 8b00011010){
+          counter.d=0;
+          state.d=state.SHIFTERROR;}
+          
+      state.SHIFTERROR: //SHIFTER ERROR
+      seg_display.values = {5d5, 5d14, 5d12, 5d12};
+      if (io_button[1] == 1){ //when button is pressed
+      state.d = state.END;} //move to end
+
+      state.END: //done with test
+      seg_display.values = {5d0, 5d0, 5d13, 5d14}; //DONE
+      counter.d = counter.q+1;
+        if (counter.q[X]==1){
+          counter.d = 0;
+          state.d = state.IDLE;} //return to IDLE
+    }
+  }
+}

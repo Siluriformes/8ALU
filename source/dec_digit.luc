@@ -1,0 +1,150 @@
+module dec_digit ( //converts 8-bit binary input to 3-digit decimal output
+    input in[8],
+    input n,
+    output out3[5],
+    output out2[5],  
+    output out1[5],  
+    output out0[5]
+  ) {
+ 
+  always {
+    if (in<=9){
+      out2=5d0;
+      out1=5d0;
+      out0=in[3:0];
+    }
+    else if (in<=19){
+      out2=5d0;
+      out1=5d1;
+      out0=in-10;
+    }
+    else if (in<=29){
+      out2=5d0;
+      out1=5d2;
+      out0=in-20;
+    }
+    else if (in<=39){
+      out2=5d0;  
+      out1=5d3;
+      out0=in-30;
+    }
+     else if (in<=49){
+      out2=5d0;
+      out1=5d4;
+      out0=in-40;
+    }
+     else if (in<=59){
+      out2=5d0;
+      out1=5d5;
+      out0=in-50;
+    }
+     else if (in<=69){
+      out2=5d0;
+      out1=5d6;
+      out0=in-60;
+    }
+     else if (in<=79){
+      out2=5d0;
+      out1=5d7;
+      out0=in-70;
+    }
+     else if (in<=89){
+      out2=5d0;
+      out1=5d8;
+      out0=in-80;
+   }
+     else if (in<=99){
+      out2=5d0;
+      out1=5d9;
+      out0=in-90;
+   }      
+     else if (in<=109){
+      out2=5d1;
+      out1=5d0;
+      out0=in-100;
+   }      
+     else if (in<=119){
+      out2=5d1;
+      out1=5d1;
+      out0=in-110;
+   } 
+     else if (in<=129){
+      out2=5d1;
+      out1=5d2;
+      out0=in-120;
+   }  
+     else if (in<=139){
+      out2=5d1;
+      out1=5d3;
+      out0=in-130;
+   }                    
+     else if (in<=149){
+      out2=5d1;
+      out1=5d4;
+      out0=in-140;
+   }                  
+     else if (in<=159){
+      out2=5d1;
+      out1=5d5;
+      out0=in-150;
+   }                      
+      else if (in<=169){
+      out2=5d1;
+      out1=5d6;
+      out0=in-160;
+   }         
+      else if (in<=179){
+      out2=5d1;
+      out1=5d7;
+      out0=in-170;
+   }               
+      else if (in<=189){
+      out2=5d1;
+      out1=5d8;
+      out0=in-180;
+   }      
+      else if (in<=199){
+      out2=5d1;
+      out1=5d9;
+      out0=in-190;
+   }            
+      else if (in<=209){
+      out2=5d2;
+      out1=5d0;
+      out0=in-200;
+   }                  
+      else if (in<=219){
+      out2=5d2;
+      out1=5d1;
+      out0=in-210;
+   }                  
+      else if (in<=229){
+      out2=5d2;
+      out1=5d2;
+      out0=in-220;
+   }
+      else if (in<=239){
+      out2=5d2;
+      out1=5d3;
+      out0=in-230;
+   }               
+      else if (in<=249){
+      out2=5d2;
+      out1=5d4;
+      out0=in-240;
+   } 
+      else if (in>249){
+      out2=5d2;
+      out1=5d5;
+      out0=in-250;
+   }                                                                       
+    else{
+      out2=0;
+      out1=0;
+      out0=0;
+    }
+    if(n==1){
+    out3=5d10;}
+    else{out3=5d11;}
+  }
+}
