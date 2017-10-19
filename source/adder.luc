@@ -23,7 +23,7 @@ var i;
       n = sum1[7];
       if(sum1[7]==1){ // if negative overflow, complement result to get positive value
         for(i=0;i<8;i++){
-          sum1[i] = sum1[i]+1;
+          sum1[i] = 1^sum1[i]; //invert digits for negative two's complement
           }
       sum1 = sum1+1;}
     b10:
